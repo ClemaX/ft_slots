@@ -1,33 +1,67 @@
 #!/usr/bin/env ruby
-require "oauth2"
-require "yaml"
+
 require "sinatra"
+require "thin"
 
-get "/callback/:code" do
-	|code|
-	"Success!"
+require "./slots_client"
+
+CALLBACK_PROTO="http"
+CALLBACK_HOST="localhost"
+CALLBACK_PORT=42069
+CALLBACK_PATH="/callback"
+
+HOME_PATH="/"
+AUTH_PATH="/authenticate"
+
+CALLBACK_URI="#{CALLBACK_PROTO}://#{CALLBACK_HOST}:#{CALLBACK_PORT}#{CALLBACK_PATH}"
+
+class SlotsApp < Sinatra::Base
+	class MissingArgument < StandardError
+	end
+
+	class AuthenticationFailure < StandardError
+	
+	end
+	def initialize()
+		@slots_client = SlotsClient.new("#{__dir__}/config.yml", CALLBACK_URI)
+	end
+
+	configure do
+		set :server, :thin
+		set :environment, :production
+		set :bind, CALLBACK_HOST
+		set :port, CALLBACK_PORT
+	end
+
+	get HOME_PATH do
+		redirect "/authenticate"
+	end
+
+	get CALLBACK_PATH do
+		# Get code
+		code = params[:code]
+		raise MissingArgument unless code
+	
+		# Complete authentication
+		raise AuthenticationFailure unless @slots_client.auth_code_callback(code)
+
+		"TODO: redirect"
+	end
+	
+	get AUTH_PATH do
+		redirect @slots_client.authenticate()
+	end
+
+	error MissingArgument do
+		status 400
+		"Missing argument!"
+	end
+
+	error AuthenticationFailure do
+		status 500
+		"Authentication failure!"
+	end
 end
 
-# Get closed projects waiting for evaluations
-def projects_get_closed(token)
-	projects_data = token.get("/v2/projects_users", params: {page: {number: 2, size: 100}, filter: {final_mark: nil}})
-	projects_data.parsed.each {
-		|project|
-		printf("[%s](%s)\n", project["status"], project["project"]["name"])
-	}
-end
+SlotsApp.start!
 
-# Load config
-api_url, redirect_uri, uid, secret = YAML.load_file("#{__dir__}/config.yml")
-# Get username
-#username = ARGV.length == 1 ? ARGV[0] : ENV["USER"]
-# Create the client with our credentials
-client = OAuth2::Client.new(uid, secret, site: api_url)
-# Ask the user to grant permissions
-auth_url = client.auth_code.authorize_url(redirect_uri: redirect_uri)
-printf("Authorize using %s\n", auth_url)
-
-# Get an access token
-token = client.client_credentials.get_token
-
-# projects_get_closed(token)
