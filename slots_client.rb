@@ -4,12 +4,13 @@ require "oauth2"
 class SlotsClient
     def initialize(config_filepath, callback_uri)
         # Set callback URI
-        @callback_uri = callback_uri
+		@callback_uri = callback_uri
 		# Load config
 		api_url, uid, secret = YAML.load_file(config_filepath)
 		# Create the client with our credentials
 		@client = OAuth2::Client.new(uid, secret, :site => api_url)
-    end
+		@authenticated = false
+	end
 
     def authenticate()
         # Ask the user to grant permissions
@@ -22,9 +23,8 @@ class SlotsClient
 
     def auth_code_callback(code)
         @token = @client.auth_code.get_token(code, :redirect_uri => @callback_uri)
-
-        return true
-    end
+		authenticated = true
+	end
 
 	# Get closed projects waiting for evaluations
 	def projects_get_closed()

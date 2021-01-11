@@ -17,11 +17,17 @@ CALLBACK_URI="#{CALLBACK_PROTO}://#{CALLBACK_HOST}:#{CALLBACK_PORT}#{CALLBACK_PA
 
 class SlotsApp < Sinatra::Base
 	class MissingArgument < StandardError
+		def initialize(message="Missing argument!")
+			super(message)
+		end
 	end
 
 	class AuthenticationFailure < StandardError
-	
+		def initialize(message="Authentication failure!")
+			super(message)
+		end
 	end
+
 	def initialize()
 		@slots_client = SlotsClient.new("#{__dir__}/config.yml", CALLBACK_URI)
 	end
@@ -34,16 +40,24 @@ class SlotsApp < Sinatra::Base
 	end
 
 	get HOME_PATH do
-		redirect "/authenticate"
+		if !slots_client.authenticated
+			redirect "/authenticate"
+		else
+			"Home"
+		end
 	end
 
 	get CALLBACK_PATH do
 		# Get code
 		code = params[:code]
 		raise MissingArgument unless code
-	
+
 		# Complete authentication
-		raise AuthenticationFailure unless @slots_client.auth_code_callback(code)
+		begin
+			@slots_client.auth_code_callback(code)
+		rescue OAuth2::Error => e
+			raise AuthenticationFailure.new(e.description)
+		end
 
 		"TODO: redirect"
 	end
@@ -53,13 +67,17 @@ class SlotsApp < Sinatra::Base
 	end
 
 	error MissingArgument do
+		|e|
 		status 400
-		"Missing argument!"
+		e.message
+		redirect HOME_PATH
 	end
 
 	error AuthenticationFailure do
+		|e|
 		status 500
-		"Authentication failure!"
+		e.message
+		redirect HOME_PATH
 	end
 end
 
